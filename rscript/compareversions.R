@@ -35,15 +35,6 @@ rownames(t3) <- t3$V5
 t2 <- t2[,2:ncol(t2)]
 t3 <- t3[,2:ncol(t3)]
 
-#drop the requires snp detection ones
-
-t2 <- t2 %>%
-  filter(!str_detect(rownames(t2), "SNPConfirmation"))
-
-t3 <- t3 %>%
-  filter(!str_detect(rownames(t3), "SNPConfirmation"))
-
-
 #melt 
 t2m <- reshape2::melt((as.matrix(t2)))
 colnames(t2m) <- c("Gene","Project_ID", "Counts")

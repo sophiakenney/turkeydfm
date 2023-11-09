@@ -2,10 +2,13 @@
 # Sophia Kenney - 9 November 2023
 
 #load packages
+library(BiocManager)
 library(tidyverse)
 library(tidylog)
 library(phyloseq)
-
+library(microViz)
+library(dada2)
+library(decontam)
 
 # ---- Prepare AMR Ouput for psobject ----
 #read in tables 
@@ -26,10 +29,6 @@ blast <- blast %>%
 
 #collaps rows in blast by gene
 blast <- cbind(blast[,2:ncol(blast)], as.data.frame(str_split_fixed(blast$pattern, "\\|", 4))[4]) #extract gene name from amr++ output and add to count matrix
-
-#filter out snp confirmation files
-blast <- blast %>%
-  filter(!str_detect(V4, "SNPConfirmation"))
 
 rownames(app) <- app$Gene
 app <- app[,2:ncol(app)]
@@ -98,10 +97,84 @@ ps_blN <- phyloseq::phyloseq(otu2, taxtab2, samp2) # create ps for BlastN out
 saveRDS(ps_app, "rdata/ps/ps_app.rds")
 saveRDS(ps_blN, "rdata/ps/ps_blN.rds")
 
-# ---- Decontam ----
+# ---- Decontam and Filtering----
+
+# how many controls at each step (extraction and other)
+ps_app %>% samdat_tbl() %>% group_by(Treatment) %>% summarize(n()) #2 extraction controls + air/sock NCs
+ps_blN %>% samdat_tbl() %>% group_by(Treatment) %>% summarize(n()) #air/sock NCs
+
+# validate
+psA <- tax_fix(ps_app)
+psB <- tax_fix(ps_blN)
+
+##filter for relative abundance##
+
+# transform to relative abundance
+psAr <- transform_sample_counts(psA, function(x) x / sum(x))
+psBr <- transform_sample_counts(psB, function(x) x / sum(x))
+
+# remove taxa with total relative abundance less than 10e-5
+psAr <- filter_taxa(psAr, function(x) mean(x) > 1e-5, TRUE) # 1187 genes
+psBr <- filter_taxa(psBr, function(x) mean(x) > 1e-5, TRUE) # 425
+
+##decontam## 
+
+# add sampling variables
+psAr <- psAr %>% 
+  ps_mutate(
+    SampleBinary = if_else(str_detect(Treatment,"NC"), true = "Control", false = "Sample")
+  ) %>%
+  ps_mutate(is.neg = if_else(SampleBinary == "Control", true = TRUE, false = FALSE))
+
+psBr <- psBr %>% 
+  ps_mutate(
+    SampleBinary = if_else(str_detect(Treatment,"NC"), true = "Control", false = "Sample")
+  ) %>%
+  ps_mutate(is.neg = if_else(SampleBinary == "Control", true = TRUE, false = FALSE))
+
+#check
+sample_data(psAr)
+sample_data(psBr)
+
+## use negative controls to identify contaminants - none identified
+contamdf.prevA <- isContaminant(psAr, method="prevalence", neg="is.neg", threshold = 0.5) # more aggressive threshold is 0.5
+table(contamdf.prevA$contaminant) # this identifies 6 as contaminants
+
+contamdf.prevB <- isContaminant(psBr, method="prevalence", neg="is.neg", threshold = 0.5) # more aggressive threshold is 0.5
+table(contamdf.prevB$contaminant) # this identifies 20 as contaminants
 
 
+#get list of contaminants
+contamsA <- rownames(contamdf.prevA[contamdf.prevA$contaminant == "TRUE",])
+contamsA
 
+contamsB <- rownames(contamdf.prevB[contamdf.prevB$contaminant == "TRUE",])
+contamsB
+
+# remove contaminant sequences 
+#from relabun filtered ps
+nocontamAr <- prune_taxa(!rownames(psAr@tax_table) %in% contamsA, psAr )
+nocontamBr <- prune_taxa(!rownames(psBr@tax_table) %in% contamsB, psBr )
+
+#for counts
+nocontamA <- prune_taxa(rownames(psAr@tax_table), psA) #drop taxa filtered based on relabun
+nocontamA <- prune_taxa(!rownames(psAr@tax_table) %in% contamsA, nocontamA ) #drop taxa deemed contaminants
+
+nocontamB <- prune_taxa(rownames(psBr@tax_table), psB) #drop taxa filtered based on relabun
+nocontamB <- prune_taxa(!rownames(psBr@tax_table) %in% contamsB, nocontamB ) #drop taxa deemed contaminants
+
+## filter SNP genes
+nocontamA <- nocontamA %>% tax_select(tax_list = "SNP", strict_matches = FALSE, deselect = TRUE)
+nocontamAr <- nocontamAr %>% tax_select(tax_list = "SNP", strict_matches = FALSE, deselect = TRUE)
+
+nocontamB <- nocontamB %>% tax_select(tax_list = "SNP", strict_matches = FALSE, deselect = TRUE)
+nocontamBr <- nocontamBr %>% tax_select(tax_list = "SNP", strict_matches = FALSE, deselect = TRUE)
+
+#save these
+saveRDS(nocontamAr,"rdata/ps/psA_deconfilt_relabun.rds")
+saveRDS(nocontamBr,"rdata/ps/psB_deconfilt_relabun.rds")
+saveRDS(nocontamA, "rdata/ps/psA_deconfilt_counts.rds")
+saveRDS(nocontamB, "rdata/ps/psB_deconfilt_counts.rds")
 
 # save work
 save.image("rdata/comparealign.rdata")

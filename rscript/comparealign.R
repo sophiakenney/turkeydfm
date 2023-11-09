@@ -199,6 +199,34 @@ nocontamB %>%
   ord_calc() %>%
   ord_plot(color = "Sample_Type")
 
+ord_explore(nocontamA)
+ord_explore(nocontamB)
+
+#  ---- rhAMR : get genes for samples used in pool----
+rT <- c("T206", "T241", "T45", "T58", "T162", "T60", "T11", "T12")
+
+for (i in 1:8){
+  rT[i ] <- ps_melt(nocontamA) %>%
+    select(OTU, Sample, Abundance) %>%
+    filter(Abundance > 0) %>%
+    filter(Sample == rT[i])
+}
+
+#save this
+saveRDS(rT, "tables/amr/rhamrexpected_app.rds")
+
+#repeat for blast
+rT <- c("T206", "T241", "T45", "T58", "T162", "T60", "T11", "T12")
+
+for (i in 1:8){
+  rT[i ] <- ps_melt(nocontamB) %>%
+    select(OTU, Sample, Abundance) %>%
+    filter(Abundance > 0) %>%
+    filter(Sample == rT[i])
+}
+
+#save this
+saveRDS(rT, "tables/amr/rhamrexpected_blast.rds")
 
 # save work
 save.image("rdata/comparealign.rdata")

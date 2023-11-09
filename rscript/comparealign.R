@@ -176,6 +176,30 @@ saveRDS(nocontamBr,"rdata/ps/psB_deconfilt_relabun.rds")
 saveRDS(nocontamA, "rdata/ps/psA_deconfilt_counts.rds")
 saveRDS(nocontamB, "rdata/ps/psB_deconfilt_counts.rds")
 
+
+# ---- Exploratory Plots ----
+nocontamA %>%
+  comp_barplot(tax_level = "class") +
+  facet_wrap(~Sample_Type, scales = "free")
+
+nocontamB %>%
+  comp_barplot(tax_level = "class") +
+  facet_wrap(~Sample_Type, scales = "free")
+
+nocontamA %>%
+  ps_filter(!str_detect(Treatment, "NC")) %>%
+  ps_filter(!str_detect(Treatment, "PC")) %>%
+  tax_transform("clr") %>%
+  ord_calc() %>%
+  ord_plot(color = "Sample_Type")
+
+nocontamB %>%
+  ps_filter(!str_detect(Treatment, "NC")) %>%
+  tax_transform("clr") %>%
+  ord_calc() %>%
+  ord_plot(color = "Sample_Type")
+
+
 # save work
 save.image("rdata/comparealign.rdata")
 
